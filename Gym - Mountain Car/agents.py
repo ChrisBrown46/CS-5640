@@ -16,7 +16,7 @@ class RandomAgent(object):
 class TabularAgent(object):
     def __init__(self, environment):
         self.environment = environment
-        self.explore_rate = 0.1
+        self.explore_rate = 1.0
 
         """
         Initialize a table to hold an expected value for every state.
