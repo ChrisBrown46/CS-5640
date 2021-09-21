@@ -18,6 +18,8 @@ class RandomAgent(object):
         return
 
 
+# The base tabular agent class. This is unable to learn so the class must be extended
+# and the learn function must be implemented.
 class TabularAgent(RandomAgent):
     def __init__(self, environment):
         self.environment = environment
@@ -88,10 +90,13 @@ class TabularAgent(RandomAgent):
 
         return int(position), int(velocity)
 
+    # The learn function is unfinished, but contains plotting instructions
     def learn(self, state, next_state, action, reward, *_):
-        self.trajectory.append(self.state_to_index(state))  # plotting purposes
+        self.trajectory.append(self.state_to_index(state))
         self.total_reward += reward
 
+    # At the end of an iteration we want to decay the exploration rate,
+    # get some plotting information, and make plots.
     def finish_iteration(self, iteration):
         self.exploration_rate *= self.exploration_decay
         self.exploration_rate = max(self.exploration_rate, self.min_exploration_rate)
@@ -171,27 +176,13 @@ class TabularAgent(RandomAgent):
                 writer.append_data(image)
 
 
-# Monte-Carlo doesn't quite work with the Mountain Car problem because
-# when we take an action we don't know for certain what the next state is
+# Exercise: Build the `learn(...)` function
 class TabularAgentMonteCarlo(TabularAgent):
     def __init__(self, environment):
         super().__init__(environment)
 
         self.rewards = []
         self.states = []
-
-    # Explore early on, then exploit the learned knowledge
-    # Actions:
-    #   Type: Discrete(3)
-    #   Num    Action
-    #   0      Accelerate to the Left
-    #   1      Don't accelerate
-    #   2      Accelerate to the Right
-    def act(self, state):
-        self.exploration_rate *= self.exploration_decay
-        self.exploration_rate = max(self.exploration_rate, self.min_exploration_rate)
-
-        return np.random.randint(self.action_space)
 
     def learn(self, state, next_state, action, reward, done):
         super().learn(state, next_state, action, reward, done)
