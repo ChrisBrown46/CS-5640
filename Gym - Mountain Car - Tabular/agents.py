@@ -56,9 +56,6 @@ class TabularAgent(RandomAgent):
     #   1      Don't accelerate
     #   2      Accelerate to the Right
     def act(self, state):
-        self.exploration_rate *= self.exploration_decay
-        self.exploration_rate = max(self.exploration_rate, self.min_exploration_rate)
-
         if np.random.random() < self.exploration_rate:
             return np.random.randint(self.action_space)
         else:
@@ -96,6 +93,9 @@ class TabularAgent(RandomAgent):
         self.total_reward += reward
 
     def finish_iteration(self, iteration):
+        self.exploration_rate *= self.exploration_decay
+        self.exploration_rate = max(self.exploration_rate, self.min_exploration_rate)
+        
         self.trajectory = np.array(self.trajectory)
         self.reward_list.append(self.total_reward)
         self.average_reward_list.append(np.mean(self.reward_list[:-250]))
@@ -180,9 +180,6 @@ class TabularAgentMonteCarlo(TabularAgent):
         self.rewards = []
         self.states = []
 
-        # Monte-Carlo looks at Value estimation instead of Quality estimation
-        self.value_table = np.zeros(shape=(self.state_space, self.state_space))
-
     # Explore early on, then exploit the learned knowledge
     # Actions:
     #   Type: Discrete(3)
@@ -203,13 +200,8 @@ class TabularAgentMonteCarlo(TabularAgent):
         self.states.append(self.state_to_index(state))
 
         if done:
-            for index in range(len(self.states)):
-                rewards = 0
-                for t in range(index, len(self.rewards)):
-                    rewards += (self.discount ** t) * self.rewards[t]
-                self.value_table[self.states[index]] += self.learning_rate * (
-                    rewards - self.value_table[self.states[index]]
-                )
+            # Q-table update using Monte Carlo
+            pass
 
     def finish_iteration(self, iteration):
         super().finish_iteration(iteration)
