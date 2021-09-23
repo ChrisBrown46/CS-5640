@@ -13,7 +13,7 @@ environment = wrappers.Monitor(
     force=True,  # clear old videos
     video_callable=lambda episode_id: episode_id == 29_999,  # what run to record
 )
-agent = TabularAgentOnPolicyTD(environment)
+agent = TabularAgentDynaQ(environment)
 
 for iteration in range(30_000):
     print(f"Iteration: {iteration}, Exploration Rate: {agent.exploration_rate:.7f}")

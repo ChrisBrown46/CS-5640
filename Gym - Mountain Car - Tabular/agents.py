@@ -1,4 +1,4 @@
-import os, shutil, imageio
+import os, shutil, imageio, random
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -26,12 +26,18 @@ class TabularAgent(RandomAgent):
         self.action_space = 3
         self.state_space = 20
 
+        # Learning updates
         self.learning_rate = 0.1
         self.discount = 0.95
 
+        # Exploration
         self.min_exploration_rate = 0.01
         self.exploration_rate = 1.0
-        self.exploration_decay = 1 - 1e-6
+        self.exploration_decay = 1 - 1e-4
+
+        # Memory replay
+        self.max_memories = 150
+        self.memories = []
 
         # Initialize a table to hold an expected value for every state-action pair.
         self.quality_table = np.zeros(
@@ -95,15 +101,22 @@ class TabularAgent(RandomAgent):
         self.trajectory.append(self.state_to_index(state))
         self.total_reward += reward
 
+        if len(self.memories) > self.max_memories:
+            self.clean_memories()
+
     # At the end of an iteration we want to decay the exploration rate,
     # get some plotting information, and make plots.
     def finish_iteration(self, iteration):
         self.exploration_rate *= self.exploration_decay
         self.exploration_rate = max(self.exploration_rate, self.min_exploration_rate)
-        
+
         self.trajectory = np.array(self.trajectory)
         self.reward_list.append(self.total_reward)
-        self.average_reward_list.append(np.mean(self.reward_list[:-250]))
+
+        if len(self.reward_list) > 250:
+            self.average_reward_list.append(np.mean(self.reward_list[:-250]))
+        else:
+            self.average_reward_list.append(np.mean(self.reward_list))
 
         if (iteration + 1) % self.plotting_iterations == 0:
             self.plot(iteration + 1)
@@ -175,64 +188,83 @@ class TabularAgent(RandomAgent):
                 image = imageio.imread(file_name)
                 writer.append_data(image)
 
+    def clean_memories(self):
+        # 1. Remove the oldest memories
+        recent_memories = self.memories[int(len(self.memories) * 0.8) :]
+        self.memories = self.memories[: int(len(self.memories) * 0.8)]
 
-# Exercise: Build the `learn(...)` function
+        # 2. Remove the least important memories
+        important_memories = sorted(self.memories, key=lambda x: abs(x[0]))
+        important_memories = important_memories[int(len(important_memories) * 0.8) :]
+        self.memories = important_memories[: int(len(important_memories) * 0.8)]
+
+        # 3. Randomly forget some memories
+        self.memories = np.array(self.memories, dtype=object)
+        rows = np.random.choice(len(self.memories), int(len(self.memories) * 0.9))
+        self.memories = self.memories[rows, :]
+
+        # 4. Put everything back together
+        self.memories = self.memories.tolist() + recent_memories + important_memories
+
+
+# Monte Carlo has a hard time with Mountain Car
 class TabularAgentMonteCarlo(TabularAgent):
     def __init__(self, environment):
         super().__init__(environment)
 
-        self.rewards = []
+        self.state_space = 20
+        self.learning_rate = 0.05
+        self.discount = 0.99
+
+        self.quality_table = np.zeros(
+            shape=(self.state_space, self.state_space, self.action_space)
+        )
+
+        self.actions = []
         self.states = []
+        self.rewards = []
 
     def learn(self, state, next_state, action, reward, done):
         super().learn(state, next_state, action, reward, done)
 
-        self.rewards.append(reward)
+        self.actions.append(action)
         self.states.append(self.state_to_index(state))
+        self.rewards.append(reward)
 
         if done:
-            # Q-table update using Monte Carlo
-            pass
+            self._memories.append((1, self.actions, self.states, self.rewards))
+            self._memory_replay()
 
     def finish_iteration(self, iteration):
         super().finish_iteration(iteration)
 
+        self.actions = []
         self.rewards = []
         self.states = []
 
-    def plot(self, iteration):
-        fig = plt.figure(figsize=(8, 4), facecolor="white")
-        fig.subplots_adjust(wspace=1)
-        fig.suptitle(f"Iteration {iteration}")
+    def _memory_replay(self):
+        np.random.shuffle(self._memories)
+        new_memories = []
 
-        value = fig.add_subplot(1, 2, 1)
-        value.imshow(self.value_table.T, cmap="Spectral")
-        value.plot(
-            self.trajectory[:, 0], self.trajectory[:, 1], c="k", linewidth=2,
-        )
-        value.set_title("Value table")
-        value.set_xticks([])
-        value.set_yticks([])
-        value.set_xlabel("velocity")
-        value.set_ylabel("position")
+        for memory in self._memories:
+            _, actions, states, rewards = memory
 
-        reward = fig.add_subplot(1, 2, 2)
-        reward.plot(np.arange(len(self.reward_list)), self.reward_list, c="k")
-        reward.plot(
-            np.arange(len(self.reward_list)),
-            self.average_reward_list,
-            c="r",
-            linewidth=2,
-        )
-        reward.set_title("Rewards over time")
-        reward.set_xlabel("iterations")
-        reward.set_ylabel("reward")
-        reward.set_ylim([-200, 0])
+            for index in range(len(states)):
+                action = actions[index]
+                state = states[index]
 
-        file_name = f"{self.image_path}/{iteration}.png"
-        self.file_names.append(file_name)
-        plt.savefig(file_name)
-        plt.close("all")
+                discounted_reward = 0
+                for t in range(index, len(rewards)):
+                    discounted_reward += (self.discount ** t) * rewards[t]
+
+                update = self.learning_rate * (
+                    discounted_reward - abs(self.quality_table[state + (action,)])
+                )
+                self.quality_table[state + (action,)] += update
+
+                new_memories.append((update, actions, states, rewards))
+
+        self._memories = new_memories
 
 
 # On-policy Temporal Difference is also known as: SARSA
@@ -247,6 +279,9 @@ class TabularAgentOnPolicyTD(TabularAgent):
         state = self.state_to_index(state)
         next_state = self.state_to_index(next_state)
 
+        self.td_update(state, next_state, action, reward, next_action)
+
+    def td_update(self, state, next_state, action, reward, next_action):
         update = self.learning_rate * (
             reward
             + self.discount * self.quality_table[next_state + (next_action,)]
@@ -266,9 +301,60 @@ class TabularAgentOffPolicyTD(TabularAgent):
         state = self.state_to_index(state)
         next_state = self.state_to_index(next_state)
 
+        self.td_update(state, next_state, action, reward)
+
+    def td_update(self, state, next_state, action, reward):
         update = self.learning_rate * (
             reward
             + self.discount * np.max(self.quality_table[next_state])
             - self.quality_table[state + (action,)]
         )
         self.quality_table[state + (action,)] += update
+
+
+# Lambda is also called "n" because lambda is a keyword in Python
+class TabularAgentTDLambda(TabularAgent):
+    def __init__(self, environment):
+        super().__init__(environment)
+
+        self.n = 5
+
+
+class TabularAgentDynaQ(TabularAgent):
+    def __init__(self, environment):
+        super().__init__(environment)
+
+        self.max_memories = 2000
+        self.model = np.zeros(
+            shape=(self.state_space, self.state_space, self.action_space), dtype=object
+        )
+
+    def learn(self, state, next_state, action, reward, done):
+        super().learn(state, next_state, action, reward, done)
+
+        state = self.state_to_index(state)
+        next_state = self.state_to_index(next_state)
+
+        self.td_update(state, next_state, action, reward)
+        self.dyna_q_remember(state, next_state, action, reward)
+        self.dyna_q_learn()
+
+    # TODO as an exercise
+    def td_update(self, state, next_state, action, reward):
+        update = 1
+        self.quality_table[state + (action,)] += update
+
+        print("Line 343 in agents.py")
+        print("Fill out this function :)")
+        exit()
+
+    def dyna_q_remember(self, state, next_state, action, reward):
+        self.memories.append([0, state, action])
+        self.model[state + (action,)] = (reward, next_state)
+
+    def dyna_q_learn(self):
+        if len(self.memories) < self.max_memories:
+            return
+        for _, state, action in random.sample(self.memories, self.max_memories):
+            reward, next_state = self.model[state + (action,)]
+            self.td_update(state, next_state, action, reward)
