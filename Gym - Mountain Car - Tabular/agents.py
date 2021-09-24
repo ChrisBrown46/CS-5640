@@ -232,8 +232,8 @@ class TabularAgentMonteCarlo(TabularAgent):
         self.rewards.append(reward)
 
         if done:
-            self._memories.append((1, self.actions, self.states, self.rewards))
-            self._memory_replay()
+            self.memories.append((1, self.actions, self.states, self.rewards))
+            self.memory_replay()
 
     def finish_iteration(self, iteration):
         super().finish_iteration(iteration)
@@ -242,11 +242,11 @@ class TabularAgentMonteCarlo(TabularAgent):
         self.rewards = []
         self.states = []
 
-    def _memory_replay(self):
-        np.random.shuffle(self._memories)
+    def memory_replay(self):
+        np.random.shuffle(self.memories)
         new_memories = []
 
-        for memory in self._memories:
+        for memory in self.memories:
             _, actions, states, rewards = memory
 
             for index in range(len(states)):
@@ -264,7 +264,7 @@ class TabularAgentMonteCarlo(TabularAgent):
 
                 new_memories.append((update, actions, states, rewards))
 
-        self._memories = new_memories
+        self.memories = new_memories
 
 
 # On-policy Temporal Difference is also known as: SARSA
