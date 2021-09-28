@@ -33,7 +33,7 @@ class TabularAgent(RandomAgent):
         # Exploration
         self.min_exploration_rate = 0.01
         self.exploration_rate = 1.0
-        self.exploration_decay = 1 - 1e-4
+        self.exploration_decay = 1 - 5e-4
 
         # Memory replay
         self.max_memories = 150
@@ -207,7 +207,8 @@ class TabularAgent(RandomAgent):
         self.memories = self.memories.tolist() + recent_memories + important_memories
 
 
-# Monte Carlo has a hard time with Mountain Car
+# Monte Carlo has a hard time with Mountain Car since an action in a state
+# does not guarantee movement into another state
 class TabularAgentMonteCarlo(TabularAgent):
     def __init__(self, environment):
         super().__init__(environment)
@@ -244,7 +245,6 @@ class TabularAgentMonteCarlo(TabularAgent):
 
     def memory_replay(self):
         np.random.shuffle(self.memories)
-        new_memories = []
 
         for memory in self.memories:
             _, actions, states, rewards = memory
@@ -258,13 +258,9 @@ class TabularAgentMonteCarlo(TabularAgent):
                     discounted_reward += (self.discount ** t) * rewards[t]
 
                 update = self.learning_rate * (
-                    discounted_reward - abs(self.quality_table[state + (action,)])
+                    discounted_reward - self.quality_table[state + (action,)]
                 )
                 self.quality_table[state + (action,)] += update
-
-                new_memories.append((update, actions, states, rewards))
-
-        self.memories = new_memories
 
 
 # On-policy Temporal Difference is also known as: SARSA
@@ -306,23 +302,63 @@ class TabularAgentOffPolicyTD(TabularAgent):
     def td_update(self, state, next_state, action, reward):
         update = self.learning_rate * (
             reward
-            + self.discount * np.max(self.quality_table[next_state])
+            + self.discount * np.amax(self.quality_table[next_state])
             - self.quality_table[state + (action,)]
         )
         self.quality_table[state + (action,)] += update
 
 
-# Lambda is also called "n" because lambda is a keyword in Python
-class TabularAgentTDLambda(TabularAgent):
+class TabularAgentTDN(TabularAgent):
     def __init__(self, environment):
         super().__init__(environment)
 
-        self.n = 5
+        self.n = 3
+        self.learning_rate = 0.05
+        self.discount = 0.90
+
+        self.actions = []
+        self.states = []
+        self.rewards = []
+
+    def learn(self, state, next_state, action, reward, done):
+        super().learn(state, next_state, action, reward, done)
+
+        self.actions.append(action)
+        self.states.append(self.state_to_index(state))
+        self.rewards.append(reward)
+
+        if len(self.actions) >= self.n:
+            self.td_update()
+
+        if done:
+            for _ in range(self.n - 1):
+                self.td_update()
+
+    def finish_iteration(self, iteration):
+        super().finish_iteration(iteration)
+
+    def td_update(self):
+        action = self.actions[0]
+        state = self.states[0]
+        discounted_reward = 0
+
+        for index, reward in enumerate(self.rewards):
+            discounted_reward += (self.discount ** index) * reward
+
+        update = self.learning_rate * (
+            discounted_reward - self.quality_table[state + (action,)]
+        )
+        self.quality_table[state + (action,)] += update
+
+        self.actions = self.actions[1:]
+        self.states = self.states[1:]
+        self.rewards = self.rewards[1:]
 
 
 class TabularAgentDynaQ(TabularAgent):
     def __init__(self, environment):
         super().__init__(environment)
+        self.learning_rate = 0.01
 
         self.max_memories = 2000
         self.model = np.zeros(
@@ -339,14 +375,13 @@ class TabularAgentDynaQ(TabularAgent):
         self.dyna_q_remember(state, next_state, action, reward)
         self.dyna_q_learn()
 
-    # TODO as an exercise
     def td_update(self, state, next_state, action, reward):
-        update = 1
+        update = self.learning_rate * (
+            reward
+            + self.discount * np.max(self.quality_table[next_state])
+            - self.quality_table[state + (action,)]
+        )
         self.quality_table[state + (action,)] += update
-
-        print("Line 343 in agents.py")
-        print("Fill out this function :)")
-        exit()
 
     def dyna_q_remember(self, state, next_state, action, reward):
         self.memories.append([0, state, action])
