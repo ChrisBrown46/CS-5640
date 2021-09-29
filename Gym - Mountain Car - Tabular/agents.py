@@ -213,14 +213,6 @@ class TabularAgentMonteCarlo(TabularAgent):
     def __init__(self, environment):
         super().__init__(environment)
 
-        self.state_space = 20
-        self.learning_rate = 0.05
-        self.discount = 0.99
-
-        self.quality_table = np.zeros(
-            shape=(self.state_space, self.state_space, self.action_space)
-        )
-
         self.actions = []
         self.states = []
         self.rewards = []
@@ -233,8 +225,20 @@ class TabularAgentMonteCarlo(TabularAgent):
         self.rewards.append(reward)
 
         if done:
-            self.memories.append((1, self.actions, self.states, self.rewards))
-            self.memory_replay()
+            for index in range(len(self.states)):
+                action = self.actions[index]
+                state = self.states[index]
+
+                discounted_reward = 0
+                for t in range(index, len(self.rewards)):
+                    discounted_reward += (self.discount ** (t - index)) * self.rewards[
+                        t
+                    ]
+
+                update = self.learning_rate * (
+                    discounted_reward - self.quality_table[state + (action,)]
+                )
+                self.quality_table[state + (action,)] += update
 
     def finish_iteration(self, iteration):
         super().finish_iteration(iteration)
@@ -242,25 +246,6 @@ class TabularAgentMonteCarlo(TabularAgent):
         self.actions = []
         self.rewards = []
         self.states = []
-
-    def memory_replay(self):
-        np.random.shuffle(self.memories)
-
-        for memory in self.memories:
-            _, actions, states, rewards = memory
-
-            for index in range(len(states)):
-                action = actions[index]
-                state = states[index]
-
-                discounted_reward = 0
-                for t in range(index, len(rewards)):
-                    discounted_reward += (self.discount ** t) * rewards[t]
-
-                update = self.learning_rate * (
-                    discounted_reward - self.quality_table[state + (action,)]
-                )
-                self.quality_table[state + (action,)] += update
 
 
 # On-policy Temporal Difference is also known as: SARSA
