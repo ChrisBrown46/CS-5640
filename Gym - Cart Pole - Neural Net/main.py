@@ -15,7 +15,6 @@ environment = wrappers.Monitor(
 agent = DeepQualityNetworkAgent(environment)
 
 for iteration in range(3000):
-
     done = False
     state = environment.reset()
     steps = 0

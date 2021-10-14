@@ -25,9 +25,11 @@ class DeepQualityNetworkAgent(RandomAgent):
         self.action_space = environment.action_space.n
         self.observation_space = environment.observation_space.shape[0]
 
-        # Learning hyperparameters
+        # Learning updates
         self.learning_rate = 0.001
-        self.discount = 0.95
+        self.discount = 0.99
+
+        # Exploration
         self.min_exploration_rate = 0.01
         self.exploration_rate = 1.0
         self.exploration_decay = 0.995
@@ -36,11 +38,16 @@ class DeepQualityNetworkAgent(RandomAgent):
         self.dqn = NeuralNetwork()
         self.dqn.add_layer(units=self.observation_space)
         self.dqn.add_layer(units=24)
-        self.dqn.add_layer(units=24)
+        self.dqn.add_layer(units=48)
         self.dqn.add_layer(units=self.action_space)
 
-        # Memory replay variables
-        self.max_memories = 5000
+        # Batching update
+        self.batch_size = 8
+        self.batched_states = []
+        self.batched_q_values = []
+
+        # Memory replay
+        self.max_memories = 500
         self.memories = []
 
         # Plotting variables
@@ -71,23 +78,43 @@ class DeepQualityNetworkAgent(RandomAgent):
         self.memories.append([1.0, state, next_state, action, reward])
 
         if done:
+            self.batch_nn_update()
             self.memory_replay()
-
-        if len(self.memories) > self.max_memories:
-            self.clean_memories()
 
     def td_update(self, state, next_state, action, reward):
         q_values = self.dqn.forward_propogation(state)
         update = self.learning_rate * (
-            reward
-            + self.discount * np.amax(self.dqn.forward_propogation(next_state))
-            - self.dqn.forward_propogation(state)[action]
+            reward + self.discount * np.amax(self.dqn.forward_propogation(next_state))
         )
-        q_values[action] += update
-        self.dqn.fit(state, q_values)
+        q_values[action] = update
+
+        # Store the update for now, then apply them in a batch
+        self.batched_states.append(state)
+        self.batched_q_values.append(q_values)
 
         # For memory replay
         return update
+
+    def batch_nn_update(self):
+        self.batched_states = np.array(self.batched_states)
+        self.batched_q_values = np.array(self.batched_q_values)
+
+        # Fancy function that partitions the full list of states/q_values into
+        # buckets of states/q_values
+        def batch_lists():
+            for i in range(len(self.batched_states)):
+                yield (
+                    self.batched_states[i : i + self.batch_size],
+                    self.batched_q_values[i : i + self.batch_size],
+                )
+
+        # Fit the neural network with one batch at a time
+        for states, q_values in batch_lists():
+            self.dqn.fit(states, q_values)
+
+        # Important to clear these values out or they grow infinitely
+        self.batched_states = []
+        self.batched_q_values = []
 
     # Perform a TD update on every memory
     def memory_replay(self):
@@ -97,8 +124,11 @@ class DeepQualityNetworkAgent(RandomAgent):
         for _, state, next_state, action, reward in self.memories:
             update = self.td_update(state, next_state, action, reward)
             new_memories.append([update, state, next_state, action, reward])
+        self.batch_nn_update()
 
         self.memories = new_memories
+        if len(self.memories) > self.max_memories:
+            self.clean_memories()
 
     # Remove half of the memories so we can continue making more
     def clean_memories(self):

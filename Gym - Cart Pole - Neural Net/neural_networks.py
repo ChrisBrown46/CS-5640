@@ -63,7 +63,9 @@ class NeuralNetwork(object):
 
     def fit(self, inputs, targets, learning_rate=1e-4, epochs=150):
         def objective(parameters, _):
-            predictions = self.forward_propogation(inputs, parameters)
+            predictions = np.array(
+                [self.forward_propogation(input, parameters) for input in inputs]
+            )
             return (np.square(targets - predictions)).mean()
 
         objective_grad = autograd.grad(objective)
@@ -96,7 +98,7 @@ class NeuralNetwork(object):
         self.parameters.append((weights, bias))
 
 
-# Build and test a MNIST network
+# Build and test a random network
 if __name__ == "__main__":
 
     model = NeuralNetwork()
