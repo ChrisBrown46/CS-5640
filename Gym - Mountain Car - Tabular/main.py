@@ -20,14 +20,19 @@ for iteration in range(30_000):
 
     state = environment.reset()
     done = False
+    steps = 0
 
     while not done:
         action = agent.act(state)
         next_state, reward, done, _ = environment.step(action)
         agent.learn(state, next_state, action, reward, done)
         state = next_state
+        steps += 1
 
     agent.finish_iteration(iteration)
+    print(
+        f"Iteration: {iteration}, Exploration Rate: {agent.exploration_rate:.7f}, Steps: {steps}"
+    )
 
 agent.make_animations()
 environment.close()

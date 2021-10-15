@@ -23,7 +23,8 @@ class RandomAgent(object):
 class TabularAgent(RandomAgent):
     def __init__(self, environment):
         self.environment = environment
-        self.action_space = 3
+        self.action_space = environment.action_space.n
+        self.observation_space = environment.observation_space.shape[0]
         self.state_space = 20
 
         # Learning updates
@@ -33,18 +34,18 @@ class TabularAgent(RandomAgent):
         # Exploration
         self.min_exploration_rate = 0.01
         self.exploration_rate = 1.0
-        self.exploration_decay = 1 - 5e-4
-
-        # Memory replay
-        self.max_memories = 150
-        self.memories = []
+        self.exploration_decay = 0.9995
 
         # Initialize a table to hold an expected value for every state-action pair.
         self.quality_table = np.zeros(
             shape=(self.state_space, self.state_space, self.action_space)
         )
 
-        # Create a temporary folder for storing images
+        # Memory replay
+        self.max_memories = 5000
+        self.memories = []
+
+        # Plotting variables
         self.file_names = []
         self.trajectory = []
         self.reward_list = []
@@ -220,9 +221,9 @@ class TabularAgentMonteCarlo(TabularAgent):
     def learn(self, state, next_state, action, reward, done):
         super().learn(state, next_state, action, reward, done)
 
-        self.actions.append(action)
-        self.states.append(self.state_to_index(state))
-        self.rewards.append(reward)
+        self.actions.append(action)  # [left, right, coast, ...] 200 long
+        self.states.append(self.state_to_index(state))  # [state0, state1, ...]
+        self.rewards.append(reward)  # [-1, -1, -1, -1, ..., +1] 200 long
 
         if done:
             for index in range(len(self.states)):
@@ -363,7 +364,7 @@ class TabularAgentDynaQ(TabularAgent):
     def td_update(self, state, next_state, action, reward):
         update = self.learning_rate * (
             reward
-            + self.discount * np.max(self.quality_table[next_state])
+            + self.discount * np.amax(self.quality_table[next_state])
             - self.quality_table[state + (action,)]
         )
         self.quality_table[state + (action,)] += update
