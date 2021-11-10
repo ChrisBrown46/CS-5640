@@ -16,8 +16,6 @@ environment = wrappers.Monitor(
 agent = TabularAgentDynaQ(environment)
 
 for iteration in range(30_000):
-    print(f"Iteration: {iteration}, Exploration Rate: {agent.exploration_rate:.7f}")
-
     state = environment.reset()
     done = False
     steps = 0
