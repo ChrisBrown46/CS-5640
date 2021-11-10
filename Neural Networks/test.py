@@ -63,7 +63,6 @@ def pytorch_training():
 
 
 if __name__ == "__main__":
-    # tf_training()
-    tensortorch_training()
+    tf_training()
+    # tensortorch_training()
     # pytorch_training()
-

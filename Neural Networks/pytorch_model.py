@@ -6,39 +6,43 @@ class CnnModel(nn.Module):
     def __init__(self):
         super(CnnModel, self).__init__()
 
+        self.reshape = lambda x: x.view(x.size(0), 1, 28, 28)
+        self.flatten = nn.Flatten()
+        self.batch_norm1 = nn.BatchNorm2d(16)
+        self.batch_norm2 = nn.BatchNorm2d(32)
+
         self.conv1 = nn.Sequential(
             nn.Conv2d(
                 in_channels=1,
                 out_channels=16,
                 kernel_size=3,
-                stride=1,
                 padding="valid",
                 bias=False,
             ),
             nn.SiLU(),
-            nn.BatchNorm2d(16),
         )
         self.conv2 = nn.Sequential(
             nn.Conv2d(
                 in_channels=16,
                 out_channels=32,
                 kernel_size=3,
-                stride=1,
                 padding="valid",
                 bias=False,
             ),
             nn.SiLU(),
-            nn.BatchNorm2d(32),
-            nn.Flatten(),
         )
 
-        self.fc1 = nn.Sequential(nn.Linear(32 * 24 * 24, 64, bias=True), nn.SiLU(),)
-        self.fc2 = nn.Sequential(nn.Linear(64, 32, bias=True), nn.SiLU(),)
-        self.fc3 = nn.Sequential(nn.Linear(32, 10, bias=True), nn.Softmax(),)
+        self.fc1 = nn.Sequential(nn.Linear(32 * 24 * 24, 64), nn.SiLU())
+        self.fc2 = nn.Sequential(nn.Linear(64, 32), nn.SiLU())
+        self.fc3 = nn.Sequential(nn.Linear(32, 10), nn.Softmax())
 
     def forward(self, x):
+        x = self.reshape(x)
         x = self.conv1(x)
+        x = self.batch_norm1(x)
         x = self.conv2(x)
+        x = self.batch_norm2(x)
+        x = self.flatten(x)
         x = self.fc1(x)
         x = self.fc2(x)
         x = self.fc3(x)
@@ -67,9 +71,6 @@ class CNN(object):
             train_loss, test_loss = 0.0, 0.0
 
             for inputs, labels in train_loader:
-                inputs = inputs.to(self.device)
-                labels = labels.to(self.device)
-
                 # zero out the parameter gradients
                 # self.optimizer.zero_grad() is slow, avoid it
                 for param in self.model.parameters():
@@ -105,10 +106,6 @@ class CNN(object):
         tensor_y = tensor_y.to(self.device)
         test_tensor_x = test_tensor_x.to(self.device)
         test_tensor_y = test_tensor_y.to(self.device)
-
-        # Change the input size from (_, 28, 28) to (_, 1, 28, 28)
-        tensor_x = tensor_x.view(tensor_x.size(0), 1, 28, 28)
-        test_tensor_x = test_tensor_x.view(test_tensor_x.size(0), 1, 28, 28)
 
         # Move the data to dataloaders
         train = torch.utils.data.TensorDataset(tensor_x, tensor_y)
